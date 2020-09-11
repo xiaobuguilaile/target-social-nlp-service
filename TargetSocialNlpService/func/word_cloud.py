@@ -14,11 +14,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 from TargetSocialNlpService.utils.RESPONSE import RET
 from TargetSocialNlpService.utils.timer import time_count
-from TargetSocialNlpService.utils.jieba_speedup import chinese_word_segment
+from TargetSocialNlpService.utils.jieba_speed_up import chinese_word_segment
 
 import json
-# import jieba
-import jieba_fast as jieba
 from collections import Counter
 from wordcloud import WordCloud, ImageColorGenerator
 import matplotlib.pyplot as plt
@@ -31,9 +29,6 @@ COMBINED_DIC = json.loads(open(BASE_DIR + "/data/combined_phrases_dict.json", en
 STOPWORDS = [line.strip() for line in open(BASE_DIR + "/data/chinese_stopwords.txt", encoding="utf-8").readlines()]
 SPECIAL_WORDS = [line.strip() for line in open(BASE_DIR + "/data/special_phrases.txt", encoding="utf-8").readlines()]
 NEG_WORDS = [line.strip() for line in open(BASE_DIR + "/data/neg_phrases.txt", encoding="utf-8").readlines()]
-# 对特殊词组作 "不拆分" 限定
-for w in SPECIAL_WORDS:
-    jieba.suggest_freq(w, tune=True)
 logger.info("------------Data Initialization Finish--------------")
 
 

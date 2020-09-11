@@ -1,7 +1,7 @@
 # -*-coding:utf-8 -*-
 
 '''
-@File       : jieba_speedup.py
+@File       : jieba_speed_up.py
 @Author     : HW Shen
 @Date       : 2020/9/11
 @Desc       :
@@ -9,9 +9,14 @@
 
 import pandas as pd
 from multiprocessing import Pool, cpu_count
-import jieba_fast as jieba  # 代替原版jieba, 速度更快
 from TargetSocialNlpService.utils.timer import time_count
-
+import os
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+import jieba_fast as jieba  # 代替原版jieba, 速度更快
+SPECIAL_WORDS = [line.strip() for line in open(BASE_DIR + "/data/special_phrases.txt", encoding="utf-8").readlines()]
+# 对特殊词组作 "不拆分" 限定
+for w in SPECIAL_WORDS:
+    jieba.suggest_freq(w, tune=True)
 
 NUMBER_OF_PROCESSES = cpu_count()  # CPU核数
 
