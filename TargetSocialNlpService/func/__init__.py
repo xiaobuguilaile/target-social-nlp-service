@@ -6,3 +6,5 @@
 @Date       : 2020/9/9
 @Desc       :
 '''
+
+from .word_cloud import GenerateWordCloud

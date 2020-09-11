@@ -81,3 +81,7 @@ class WordCloudHandler(BaseHandler, ABC):
         else:
             raise HTTPError(400, "Query argument cannot be empty string")
         return res
+
+
+if __name__ == '__main__':
+    print(NUMBER_OF_EXECUTOR)

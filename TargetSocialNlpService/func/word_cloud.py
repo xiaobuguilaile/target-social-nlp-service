@@ -7,22 +7,24 @@
 @Desc       : 词云展示模块
 '''
 
-
-import sys
 import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# import sys
 # sys.path.append(BASE_DIR + "TargetSocialNlpService/")
 
 from TargetSocialNlpService.utils.RESPONSE import RET
+from TargetSocialNlpService.utils.timer import time_count
+from TargetSocialNlpService.utils.jieba_speedup import chinese_word_segment
+
 import json
-import jieba
+# import jieba
+import jieba_fast as jieba
 from collections import Counter
 from wordcloud import WordCloud, ImageColorGenerator
 import matplotlib.pyplot as plt
 import imageio
 from loguru import logger
 import pandas as pd
-import time
 
 logger.info("------------Data Initialization Start--------------")
 COMBINED_DIC = json.loads(open(BASE_DIR + "/data/combined_phrases_dict.json", encoding="utf-8").read())
@@ -56,8 +58,9 @@ class GenerateWordCloud(object):
         #     jieba.suggest_freq(w, tune=True)
         pass
 
+    @time_count
     def get_phrases_freq(self, text:str):
-        """ 主程序 """
+        """ 词频生成主程序 """
 
         logger.info(" text length is : {} ".format(len(text)))
 
@@ -73,17 +76,9 @@ class GenerateWordCloud(object):
                            'words_freq': {}}
             return json.dumps(return_dict, ensure_ascii=False)
 
-        t1 = time.time()
         jieba_words = self.jieba_cut(text)  # jieba分词
-        t2 = time.time()
-        logger.info("jieba cut cost time ： {:.2f} s".format(t2-t1))
         self.count_dict = Counter(jieba_words)  # 词频统计
-        t3 = time.time()
-        logger.info("words count cost time : {:.2f} s".format(t3-t2))
-
         filter_special_words = self.filter(jieba_words)  # 清除不符合要求的分词
-        t4 = time.time()
-        logger.info("words filter cost time : {:.2f} s".format(t4-t3))
 
         # 通过filter_words对 count_dict 进行过滤
         filter_special_dic = {}
@@ -91,8 +86,6 @@ class GenerateWordCloud(object):
             filter_special_dic[w] = self.count_dict[w]
         # 合并同义词，统一用规定词代替
         self.output_dic = self.combine_synonymy_phrases(filter_special_dic)
-        t5 = time.time()
-        logger.info("combine synonymy phrases cost : {:.2f} s".format(t5-t4))
 
         total_phrases_freq = dict(sorted(self.output_dic.items(), key=lambda kv:kv[1], reverse=True))
 
@@ -104,27 +97,27 @@ class GenerateWordCloud(object):
         return_dict["words_freq"] = total_phrases_freq
         return_dict["neg_words_freq"] = neg_phrases_freq
 
-        logger.info("word cloud total cost : {:.2f} s".format(t5-t1))
-
         return json.dumps(return_dict, ensure_ascii=False)
 
     @staticmethod
+    @time_count
     def jieba_cut(content):
 
-        jieba_words = jieba.lcut(content)
+        # jieba_words = jieba.lcut(content)
+        jieba_words = chinese_word_segment(content)
 
         return jieba_words
 
+    @time_count
     def filter(self, words):
 
         # 剔除停止词, 长度=1的词 (eg. "很", "好"), 数字字母词 (eg."59ml")
-        # filter_words = [w_f[0] for w_f in self.count_dict.most_common(10000)
-        #                 if w_f[0] not in self.stopwords and w_f[0] in self.special_words]
         # filter_words = [w_f[0] for w_f in self.count_dict.most_common(10000) if w_f[0] not in STOPWORDS and w_f[0] in SPECIAL_WORDS]
         filter_words = [w_f[0] for w_f in self.count_dict.most_common(10000) if w_f[0] in SPECIAL_WORDS]
 
         return filter_words
 
+    @time_count
     def combine_synonymy_phrases(self, filter_dic):
         """ 合并同义词，统一用 >>规定词<< 代替 """
 
