@@ -18,6 +18,7 @@ from tornado import gen
 from tornado.concurrent import run_on_executor
 from tornado.web import HTTPError
 from TargetSocialNlpService.func.word_cloud import GenerateWordCloud
+from TargetSocialNlpService.func.kw_based_aspect_opinion import KeywordsBasedAspectOpinion
 
 
 NUMBER_OF_EXECUTOR = 16  # 线程池的数量
@@ -83,5 +84,27 @@ class WordCloudHandler(BaseHandler, ABC):
         return res
 
 
-if __name__ == '__main__':
-    print(NUMBER_OF_EXECUTOR)
+class SentimentHandler(BaseHandler, ABC):
+    """ 情感分析子类 """
+
+    def _post_request_arguments(self, *args, **kwargs):
+        '''
+        获取数据
+        '''
+        logger.info(self.__class__.__name__)
+
+        data = json.loads(self.request.body)
+        if not data:
+            raise HTTPError(400, "Query argument cannot be empty string")
+        return data
+
+    def _request_service(self, text):
+        '''
+        request请求处理
+        '''
+        if text:
+            kbao = KeywordsBasedAspectOpinion()
+            res = kbao.get_output(text)
+        else:
+            raise HTTPError(400, "Query argument cannot be empty string")
+        return res

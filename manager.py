@@ -11,11 +11,12 @@ import tornado.web
 from loguru import logger
 from tornado.ioloop import IOLoop
 from tornado.web import URLSpec
-from TargetSocialNlpService.func.handler import WordCloudHandler
+from TargetSocialNlpService.func.handler import WordCloudHandler, SentimentHandler
 
 
 HANDLERS = [
     URLSpec(r'/wordcloud', WordCloudHandler, name=WordCloudHandler.__name__),  # 词云统计接口
+    URLSpec(r'/sentiment', SentimentHandler, name=SentimentHandler.__name__),  # 情感分析接口
 ]
 
 
