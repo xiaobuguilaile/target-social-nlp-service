@@ -7,7 +7,7 @@
 @Desc       :
 '''
 
-
+import re
 from TargetSocialNlpService.utils.RESPONSE import RET
 import json
 import jieba_fast as jieba
@@ -35,18 +35,40 @@ class KeywordsBasedAspectOpinion(object):
 
         self.output = {}
         self.jieba_words = []
+        self.split_texts = []
         self.load_data()
-        self.L1_only_list = ["L1_delivery_package", "L1_service", "L1_authenticity", "L1_logistics"]
-        self.L1_L2_map = {"L1_product_efficiency":["L2_product_general", "L2_scent", "L2_ingredient"],
-                          "L1_product_package":["L2_outer_package", "L2_bottle_package", "L2_volume"],
-                          "L1_price":["L2_pricing", "L2_promotion_deals", "L2_gifts"],
+        # 中兴评论标定词
+        self.normal_judge_words = ["刚收到货", "用了之后给评价", "还没有使用", "还没试",  "用后评价", "还没使用",
+            "还没开始用", "试过后再评", "还没用", "还没有用", "用完再说", "用了再来追评", "还未使用",
+            "用了再来评价", "收到还没用", "用了再说", "还没有试", "过几天试试"]
+
+        # 只到 L1级 分类
+        self.L1_only_list = ["L1_快递包装", "L1_客服", "L1_正品", "L1_物流"]
+        # 只到 L2级 分类
+        self.L1_L2_map = {"L1_产品力": ["L2_产品通用效果", "L2_味道", "L2_成分"],
+                          "L1_产品包装": ["L2_外包装", "L2_产品设计", "L2_容量"],
+                          "L1_价格": ["L2_定价", "L2_促销", "L2_礼物"]
         }
-        self.L2_L3_map = {"L2_function":["L3_保湿滋润", "L3_养肤", "L3_温和", "L3_提亮&美白", "L3_防晒", "L3_控油", "L3_遮瑕", "L3_持久"],
-                          "L2_texture&skin_feel":["L3_轻薄", "L3_细腻", "L3_水润", "L3_粘腻", "L3_好推开", "L3_服帖", "L3_通用质地"],
-                          "L2_color&shade":["L3_修正肤色", "L3_色号"],
-                          "L2_skin_type":["L3_干皮", "L3_油皮"],
-                          "L2_makeup_look":["L3_混合肌", "L3_中性肌", "L3_敏感肌", "L3_痘肌", "L3_哑光肌", "L3_奶油肌", "L3_自然", "L3_裸妆", "L3_丝绸", "L3_水光肌", "L3_光泽肌", "L3_瓷肌", "L3_空气感"]
+        # 下沉到 L3级 分类
+        self.L2_L3_map = {"L2_功效": ["L3_保湿滋润", "L3_养肤", "L3_温和", "L3_提亮&美白", "L3_防晒", "L3_控油", "L3_遮瑕", "L3_持久"],
+                          "L2_质地&肤感": ["L3_轻薄", "L3_细腻", "L3_水润", "L3_粘腻", "L3_好推开", "L3_服帖", "L3_通用质地"],
+                          "L2_颜色&色号": ["L3_修正肤色", "L3_色号"],
+                          "L2_肤质": ["L3_干皮", "L3_油皮"],
+                          "L2_妆效": ["L3_混合肌", "L3_中性肌", "L3_敏感肌", "L3_痘肌", "L3_哑光肌", "L3_奶油肌", "L3_自然", "L3_裸妆", "L3_丝绸", "L3_水光肌", "L3_光泽肌", "L3_瓷肌", "L3_空气感"]
         }
+        self.L2_L1_map = {"L2_产品通用效果": "L1_产品力",
+                          "L2_味道": "L1_产品力",
+                          "L2_成分": "L1_产品力",
+                          "L2_功效": "L1_产品力",
+                          "L2_质地&肤感": "L1_产品力",
+                          "L2_颜色&色号": "L1_产品力",
+                          "L2_肤质": "L1_产品力",
+                          "L2_妆效": "L1_产品力",
+                          "L2_外包装": "L1_产品包装",
+                          "L2_产品设计": "L1_产品包装",
+                          "L2_定价": "L1_价格",
+                          "L2_促销": "L1_价格",
+                          "L2_礼物": "L1_价格"}
 
     def load_data(self):
 
@@ -56,17 +78,66 @@ class KeywordsBasedAspectOpinion(object):
 
     def get_baidu_sentiment(self, input_text):
 
-        # 利用 Baidu 的 api 接口获取情感分析结果
-        result = client.sentimentClassify(input_text)
-        # print(result)
-        items = result["items"][0]
-        emotion = "Positive" if items["positive_prob"] > 0.5 else "Negative"
-        # items['sentiment'] = emotion
-        # del items["confidence"]
-        self.output["sentiment"] = emotion
+        for word in self.normal_judge_words:
+            if word in input_text:
+                return 0
+        try:
+            # 利用 baidu 的 api 接口获取情感分析结果
+            result = client.sentimentClassify(input_text)
+            print("baidu result: ", result)
+            items = result["items"][0]
+        except Exception as e:
+            import time
+            time.sleep(2)
+            print("百度api接口访问超出限制：", e)
+            # 利用 Baidu 的 api 接口获取情感分析结果
+            result = client.sentimentClassify(input_text)
+            print("baidu result: ", result)
+            items = result["items"][0]
 
-    def get_segment(self):
-        pass
+        emotion = 1 if items["positive_prob"] > 0.5 else -1
+
+        return emotion
+    
+    def get_splited_sentiment(self, keyword):
+        """ 找到当前关键词所处的片段，及其情感 """
+        
+        for split_text in self.split_texts:
+            if keyword in split_text:
+                emotion = self.get_baidu_sentiment(split_text)
+                print(keyword, ": ", split_text, ": ", emotion)
+                return emotion
+
+    def get_segment(self, review_text, aspect):
+        """ 通过标点符号和转折词对 text进行切分，获取某个 aspect 的短句 """
+
+        # if self.is_review_only_one_aspect(review_text):
+        #     return review_text
+
+        cur_aspect_index = review_text.index(aspect)
+        cur_aspect_end_index_begin = cur_aspect_index + len(aspect)  # aspect开始的下标
+        cur_aspect_end_index_end = cur_aspect_end_index_begin  # aspect结束的下标
+        end_pos = len(review_text) - 1
+
+        stop_punct_map = {c: None for c in '，。！？； '}  # 标点符号
+        # stop_punct_map = {c: None for c in ',.!?;'}  # 标点符号
+        # relation_punct_list = ["and", "when", "but"]  # 转折词
+
+        # next_aspect = self.get_next_aspect(review_text[cur_aspect_end_index_begin:end_pos])
+        # 从 “aspect开始的下标” 到 “text结束” 的部分查找 “形容词 adj”
+        # cur_aspect_des = self.get_cur_aspect_adj(review_text[cur_aspect_end_index_begin:end_pos])
+
+        while cur_aspect_end_index_end <= end_pos:
+
+            # 在 “标点符号” 处截取
+            cur_str = review_text[cur_aspect_end_index_end:min(cur_aspect_end_index_end + 1, end_pos)]
+            if cur_str in stop_punct_map:
+                break
+
+            cur_aspect_end_index_end += 1
+
+        cur_aspect_end_index_end = min(cur_aspect_end_index_end, end_pos)
+        return review_text[cur_aspect_index:cur_aspect_end_index_end]
 
     def get_output(self, input_text):
 
@@ -74,10 +145,14 @@ class KeywordsBasedAspectOpinion(object):
         return_dict = {'status': RET.OK,
                        'response': 'success',
                        'sentiment_res': {}}
-        self.jieba_words = jieba.lcut(input_text.replace("：", ""))  # 获得 jieba 切词结果
-        print(self.jieba_words)
 
-        self.get_baidu_sentiment(input_text)  # 百度api给出整体评价
+        self.output["text"] = input_text
+        self.jieba_words = jieba.lcut(input_text.replace("：", ""))  # 获得 jieba 切词结果
+        print("jieba_words: ", self.jieba_words)
+        self.split_texts = re.split('[，。？,.;?: ]+', input_text.strip())
+        print("split_texts: ", self.split_texts)
+        emotion = self.get_baidu_sentiment(input_text)  # 百度api给出整体评价
+        self.output["res"]["emotion"] = emotion
 
         self.get_general_comment(input_text)  # 获得 general 总评
 
@@ -99,43 +174,64 @@ class KeywordsBasedAspectOpinion(object):
                 return
         if len(text) <= 5:  # 总评长度限制
 
-            for g_word in self.base["general"]["good"]:
+            for g_word in self.base["通用评论"]["good"]:
                 if g_word in text:
-                    self.output["general"]["match"].append(g_word)
-                    self.output["general"]["emotion"] = 1
+                    # self.output["res"]["emotion"] = 1
+                    self.output["details"]["通用评论"]["match"].append(g_word)
+                    self.output["details"]["通用评论"]["emotion"] = 1
                     return
 
-            for n_word in self.base["general"]["normal"]:
+            for n_word in self.base["通用评论"]["normal"]:
                 if n_word in text:
-                    self.output["general"]["match"].append(n_word)
-                    self.output["general"]["emotion"] = 0
+                    # self.output["res"]["emotion"] = 0
+                    self.output["details"]["通用评论"]["match"].append(n_word)
+                    self.output["details"]["通用评论"]["emotion"] = 0
                     return
 
-            for b_word in self.base["general"]["bad"]:
+            for b_word in self.base["通用评论"]["bad"]:
                 if b_word in text:
-                    self.output["general"]["match"].append(b_word)
-                    self.output["general"]["emotion"] = -1
+                    # self.output["res"]["emotion"] = -1
+                    self.output["details"]["通用评论"]["match"].append(b_word)
+                    self.output["details"]["通用评论"]["emotion"] = -1
                     return
 
     def get_only_l1_comment(self):
-        """ 匹配 L1 的评论信息，并把结果加入 ouput """
+        """ 匹配 L1 的评论信息，并把结果加入 output """
 
         # Only_L1_level
         for L1_keyword in self.L1_only_list:
             for g_word in self.base[L1_keyword]["good"]:
                 if g_word in self.jieba_words:
-                    self.output[L1_keyword]["match"].append(g_word)
-                    self.output[L1_keyword]["emotion"] = 1
+                    splited_emotion = self.get_splited_sentiment(g_word)
+                    self.output["res"]["matched_emotion"].append({
+                        "match_item": L1_keyword,
+                        "emotion": splited_emotion,
+                        "level_path":[L1_keyword]
+                    })
+                    self.output["details"][L1_keyword]["match"].append(g_word)
+                    self.output["details"][L1_keyword]["emotion"] = 1
                     break
             for n_word in self.base[L1_keyword]["normal"]:
                 if n_word in self.jieba_words:
-                    self.output[L1_keyword]["match"].append(n_word)
-                    self.output[L1_keyword]["emotion"] = 0
+                    splited_emotion = self.get_splited_sentiment(n_word)
+                    self.output["res"]["matched_emotion"].append({
+                        "match_item": L1_keyword,
+                        "emotion": splited_emotion,
+                        "level_path": [L1_keyword]
+                    })
+                    self.output["details"][L1_keyword]["match"].append(n_word)
+                    self.output["details"][L1_keyword]["emotion"] = 0
                     break
             for b_word in self.base[L1_keyword]["bad"]:
                 if b_word in self.jieba_words:
-                    self.output[L1_keyword]["match"].append(b_word)
-                    self.output[L1_keyword]["emotion"] = -1
+                    splited_emotion = self.get_splited_sentiment(b_word)
+                    self.output["res"]["matched_emotion"].append({
+                        "match_item": L1_keyword,
+                        "emotion": splited_emotion,
+                        "level_path": [L1_keyword]
+                    })
+                    self.output["details"][L1_keyword]["match"].append(b_word)
+                    self.output["details"][L1_keyword]["emotion"] = -1
                     break
 
     def get_l1_l2_comment(self):
@@ -146,66 +242,95 @@ class KeywordsBasedAspectOpinion(object):
                 # print(L2_keyword)
                 for g_word in self.base[L1_keyword][L2_keyword]["good"]:
                     if g_word in self.jieba_words:
-                        self.output[L1_keyword][L2_keyword]["match"].append(g_word)
-                        self.output[L1_keyword][L2_keyword]["emotion"] = 1
-                        self.output[L1_keyword]["emotion"] += 1
+                        splited_emotion = self.get_splited_sentiment(g_word)
+                        self.output["res"]["matched_emotion"].append({
+                            "match_item": L2_keyword,
+                            "emotion": splited_emotion,
+                            "level_path": [L2_keyword, L1_keyword]
+                        })
+                        self.output["details"][L1_keyword][L2_keyword]["match"].append(g_word)
+                        self.output["details"][L1_keyword][L2_keyword]["emotion"] = 1
+                        self.output["details"][L1_keyword]["emotion"] += 1
                         break
                 for n_word in self.base[L1_keyword][L2_keyword]["normal"]:
                     if n_word in self.jieba_words:
-                        self.output[L1_keyword][L2_keyword]["match"].append(n_word)
-                        self.output[L1_keyword][L2_keyword]["emotion"] = 0
+                        splited_emotion = self.get_splited_sentiment(n_word)
+                        self.output["res"]["matched_emotion"].append({
+                            "match_item": L2_keyword,
+                            "emotion": splited_emotion,
+                            "level_path": [L2_keyword, L1_keyword]
+                        })
+                        self.output["details"][L1_keyword][L2_keyword]["match"].append(n_word)
+                        self.output["details"][L1_keyword][L2_keyword]["emotion"] = 0
                         break
                 for b_word in self.base[L1_keyword][L2_keyword]["bad"]:
                     if b_word in self.jieba_words:
-                        self.output[L1_keyword][L2_keyword]["match"].append(b_word)
-                        self.output[L1_keyword][L2_keyword]["emotion"] = -1
-                        self.output[L1_keyword]["emotion"] -= 1
+                        splited_emotion = self.get_splited_sentiment(b_word)
+                        self.output["res"]["matched_emotion"].append({
+                            "match_item": L2_keyword,
+                            "emotion": splited_emotion,
+                            "level_path": [L2_keyword, L1_keyword]
+                        })
+                        self.output["details"][L1_keyword][L2_keyword]["match"].append(b_word)
+                        self.output["details"][L1_keyword][L2_keyword]["emotion"] = -1
+                        self.output["details"][L1_keyword]["emotion"] -= 1
                         break
 
     def get_11_l2_l3_comment(self):
 
         # L1_L2_L3_level
         for L2_keyword in self.L2_L3_map:
+            L1_keyword = self.L2_L1_map[L2_keyword]
             for L3_keyword in self.L2_L3_map[L2_keyword]:
-                for g_word in self.base["L1_product_efficiency"][L2_keyword][L3_keyword]["good"]:
+                for g_word in self.base["L1_产品力"][L2_keyword][L3_keyword]["good"]:
                     if g_word in self.jieba_words:
-                        self.output["L1_product_efficiency"][L2_keyword][L3_keyword]["match"].append(g_word)
-                        self.output["L1_product_efficiency"][L2_keyword][L3_keyword]["emotion"] = 1
-                        self.output["L1_product_efficiency"][L2_keyword]["emotion"] += 1
-                        self.output["L1_product_efficiency"]["emotion"] += 1
+                        splited_emotion = self.get_splited_sentiment(g_word)
+                        self.output["res"]["matched_emotion"].append({
+                            "match_item": L3_keyword,
+                            "emotion": splited_emotion,
+                            "level_path": [L3_keyword, L2_keyword, L1_keyword]
+                        })
+                        self.output["details"]["L1_产品力"][L2_keyword][L3_keyword]["match"].append(g_word)
+                        self.output["details"]["L1_产品力"][L2_keyword][L3_keyword]["emotion"] = 1
+                        self.output["details"]["L1_产品力"][L2_keyword]["emotion"] += 1
+                        self.output["details"]["L1_产品力"]["emotion"] += 1
                         break
-                for n_word in self.base["L1_product_efficiency"][L2_keyword][L3_keyword]["normal"]:
+                for n_word in self.base["L1_产品力"][L2_keyword][L3_keyword]["normal"]:
                     if n_word in self.jieba_words:
-                        self.output["L1_product_efficiency"][L2_keyword][L3_keyword]["match"].append(n_word)
-                        self.output["L1_product_efficiency"][L2_keyword][L3_keyword]["emotion"] = 0
+                        splited_emotion = self.get_splited_sentiment(n_word)
+                        self.output["res"]["matched_emotion"].append({
+                            "match_item": L3_keyword,
+                            "emotion": splited_emotion,
+                            "level_path": [L3_keyword, L2_keyword, L1_keyword]
+                        })
+                        self.output["details"]["L1_产品力"][L2_keyword][L3_keyword]["match"].append(n_word)
+                        self.output["details"]["L1_产品力"][L2_keyword][L3_keyword]["emotion"] = 0
                         break
-                for b_word in self.base["L1_product_efficiency"][L2_keyword][L3_keyword]["bad"]:
+                for b_word in self.base["L1_产品力"][L2_keyword][L3_keyword]["bad"]:
                     if b_word in self.jieba_words:
-                        self.output["L1_product_efficiency"][L2_keyword][L3_keyword]["match"].append(b_word)
-                        self.output["L1_product_efficiency"][L2_keyword][L3_keyword]["emotion"] = -1
-                        self.output["L1_product_efficiency"][L2_keyword]["emotion"] -= 1
-                        self.output["L1_product_efficiency"]["emotion"] -= 1
+                        splited_emotion = self.get_splited_sentiment(b_word)
+                        self.output["res"]["matched_emotion"].append({
+                            "match_item": L3_keyword,
+                            "emotion": splited_emotion,
+                            "level_path": [L3_keyword, L2_keyword, L1_keyword]
+                        })
+                        self.output["details"]["L1_产品力"][L2_keyword][L3_keyword]["match"].append(b_word)
+                        self.output["details"]["L1_产品力"][L2_keyword][L3_keyword]["emotion"] = -1
+                        self.output["details"]["L1_产品力"][L2_keyword]["emotion"] -= 1
+                        self.output["details"]["L1_产品力"]["emotion"] -= 1
                         break
 
 
 if __name__ == '__main__':
 
-    input_text = "保湿控油很差，一下就油了，而且浮粉很严重，最难用的粉底液，（我是不容易脱妆的肌肤）无关黑他，如实告知自己使用效果，唉"
-    # input_text = " 持妆六小时，已经暗淡了。和肤色接近了。刚刚涂上的时候有点白的过活。个人感觉适合油皮，我是偏干皮，然后需要用力拍，不然会卡粉。 整体评价：不错。 保湿控油情况：控油可有 持久度：还可以吧 妆感效果：雾面 遮瑕效果：还可以，脸上没什么瑕疵。 我的肤质：混合偏干"
-    # input_text = " 质地轻薄很好用"
-    # input_text = " 第二次购买了，光泽度很好，很水润，不控油，特别喜欢，下次还来！物流也很快昨天买的今天到货"
-    # input_text = " 第二次购买了，光泽度很好，很水润，不控油，特别喜欢，下次还来！物流也很快昨天买的今天到货"
-    # input_text = " 一直都用美宝莲的东西 粉底液 口号 遮瑕都很好用 就买了一瓶粉底液 送了四件 很合算"
-    # input_text = "持久度：太太难用了！！！！不持妆，氧化巨快，而且超级无敌干，本人油皮上脸都是干的！！！！！  遮瑕效果：忍很久了。 妆感效果：重点是很快斑驳。！！！！要买的妹子慎买！"
-    # input_text = "用了好几天才来评价，个人觉得蛮不错的，持久效果也好，不干，很好上妆，遮瑕还可以，值得推荐"
-    # input_text = "遮瑕不好"
-    # input_text = "浮粉脱妆，还巨持妆，脱粉严重，之前一直用这个牌子其他系列的粉底液，但是这个真的难用，不出汗一上午就浮粉脱妆了，更别说出汗了，简直一言难尽"
-    # input_text = "整体不错 但是物流不送上门"
-    # input_text = "发货神速"
-    # input_text = "有点卡粉 而且持妆力差 其他还不错"
+    # input_text = "保湿控油很差，一下就油了，而且浮粉很严重，最难用的粉底液，（我是不容易脱妆的肌肤）无关黑他，如实告知自己使用效果，唉"
+    input_text = "很快很好，不愧是大牌"
+    # print(re.split('[，。？ ,.?]+', input_text.strip()))
 
     ob = KeywordsBasedAspectOpinion()
     ob.get_output(input_text)
+    # seg_txt = ob.get_segment(input_text, "浮粉")
+    # print(seg_txt)
 
     # ob.get_baidu_sentiment(input_text)
     # import requests
