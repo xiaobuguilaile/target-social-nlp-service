@@ -11,11 +11,12 @@ import tornado.web
 from loguru import logger
 from tornado.ioloop import IOLoop
 from tornado.web import URLSpec
-from TargetSocialNlpService.func.handler import WordCloudHandler, SentimentHandler
+from TargetSocialNlpService.func.handler import WordCloudHandler, SentimentHandler, WordFrequcncyHandler
 
 
 HANDLERS = [
     URLSpec(r'/wordcloud', WordCloudHandler, name=WordCloudHandler.__name__),  # 词云统计接口
+    URLSpec(r'/wordfrequency', WordFrequcncyHandler, name=WordFrequcncyHandler.__name__),  # 词频统计接口
     URLSpec(r'/sentiment', SentimentHandler, name=SentimentHandler.__name__),  # 情感分析接口
 ]
 
@@ -25,8 +26,8 @@ if __name__ == '__main__':
     # 日志文件
     logger.add("log/file_{time}.log")
 
-    SERVER_PORT = 5555
-    SERVER_IP = "127.0.0.1"
+    SERVER_PORT = 8080
+    SERVER_IP = "192.168.1.240"
 
     app = tornado.web.Application(handlers=HANDLERS, debug=True)
     app.listen(SERVER_PORT, SERVER_IP)

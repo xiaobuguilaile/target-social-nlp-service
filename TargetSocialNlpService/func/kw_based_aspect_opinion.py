@@ -23,9 +23,13 @@ for w in SPECIAL_WORDS:
 
 from aip import AipNlp
 # 利用百度云提供的API接口实现情感分析
-APP_ID = '22678530'
-API_KEY = 'C7ZItdUG22PKLpqBDrSO4xZn'
-SECRET_KEY = 'N3CIe75AHiMSaIjWzoIfFK1tegYkmYCZ'
+# APP_ID = '22678530'
+# API_KEY = 'C7ZItdUG22PKLpqBDrSO4xZn'
+# SECRET_KEY = 'N3CIe75AHiMSaIjWzoIfFK1tegYkmYCZ'
+
+APP_ID = '22722222'
+API_KEY = 'v1h52hZ28wj5YxmutmBlyvMQ'
+SECRET_KEY = 'QOiVzTMlX8Iq1ZwaN6p8DpK54xcW14NF'
 client = AipNlp(APP_ID, API_KEY, SECRET_KEY)
 
 
@@ -41,6 +45,8 @@ class KeywordsBasedAspectOpinion(object):
         self.normal_judge_words = ["刚收到货", "用了之后给评价", "还没有使用", "还没试",  "用后评价", "还没使用",
             "还没开始用", "试过后再评", "还没用", "还没有用", "用完再说", "用了再来追评", "还未使用",
             "用了再来评价", "收到还没用", "用了再说", "还没有试", "过几天试试"]
+        # L3级特殊词汇处理
+        self.special_L3 = ["油皮亲妈", "真的不油", "根本不油"]
 
         # 只到 L1级 分类
         self.L1_only_list = ["L1_快递包装", "L1_客服", "L1_正品", "L1_物流"]
@@ -78,24 +84,29 @@ class KeywordsBasedAspectOpinion(object):
 
     def get_baidu_sentiment(self, input_text):
 
-        for word in self.normal_judge_words:
-            if word in input_text:
-                return 0
+        # 个别短语或词性特殊处理
+        for word in self.special_L3:
+            if word in input_text: return 1
+
+        # 利用 baidu 的 api 接口获取情感分析结果
+        result = client.sentimentClassify(input_text)
+        print("baidu result: ", result)
+        items = result["items"][0]
         try:
-            # 利用 baidu 的 api 接口获取情感分析结果
-            result = client.sentimentClassify(input_text)
-            print("baidu result: ", result)
-            items = result["items"][0]
+            emotion = 1 if items["positive_prob"] > 0.5 else -1
         except Exception as e:
             import time
-            time.sleep(2)
+            time.sleep(0.1)
             print("百度api接口访问超出限制：", e)
             # 利用 Baidu 的 api 接口获取情感分析结果
             result = client.sentimentClassify(input_text)
             print("baidu result: ", result)
             items = result["items"][0]
-
-        emotion = 1 if items["positive_prob"] > 0.5 else -1
+            try:
+                emotion = 1 if items["positive_prob"] > 0.5 else -1
+            except Exception as e:
+                print("二次访问百度仍然无结果: ", e)
+                emotion = 0
 
         return emotion
     
@@ -151,7 +162,14 @@ class KeywordsBasedAspectOpinion(object):
         print("jieba_words: ", self.jieba_words)
         self.split_texts = re.split('[，。？,.;?: ]+', input_text.strip())
         print("split_texts: ", self.split_texts)
-        emotion = self.get_baidu_sentiment(input_text)  # 百度api给出整体评价
+
+        # 文本的整体情感
+        emotion = 999
+        for word in self.normal_judge_words:  # 文本中性 特殊判断
+            if word in input_text:
+                emotion = 0
+        if emotion != 0:
+            emotion = self.get_baidu_sentiment(input_text)  # 百度api给出整体评价
         self.output["res"]["emotion"] = emotion
 
         self.get_general_comment(input_text)  # 获得 general 总评
@@ -161,8 +179,10 @@ class KeywordsBasedAspectOpinion(object):
         self.get_11_l2_l3_comment()
 
         print(self.output)
-
-        return_dict["sentiment_res"] = self.output
+        # self.output["res"]["matched_emotion"] = list(set(self.output["res"]["matched_emotion"]))
+        return_dict["sentiment_res"] = {"text": self.output["text"],
+                                        "seg_words": self.jieba_words,
+                                        "res": self.output["res"]}
 
         return json.dumps(return_dict, ensure_ascii=False)
 
@@ -284,7 +304,10 @@ class KeywordsBasedAspectOpinion(object):
             for L3_keyword in self.L2_L3_map[L2_keyword]:
                 for g_word in self.base["L1_产品力"][L2_keyword][L3_keyword]["good"]:
                     if g_word in self.jieba_words:
-                        splited_emotion = self.get_splited_sentiment(g_word)
+                        if g_word in self.special_L3:  # L3特殊词汇
+                            splited_emotion = 1
+                        else:
+                            splited_emotion = self.get_splited_sentiment(g_word)
                         self.output["res"]["matched_emotion"].append({
                             "match_item": L3_keyword,
                             "emotion": splited_emotion,
@@ -323,8 +346,18 @@ class KeywordsBasedAspectOpinion(object):
 
 if __name__ == '__main__':
 
-    # input_text = "保湿控油很差，一下就油了，而且浮粉很严重，最难用的粉底液，（我是不容易脱妆的肌肤）无关黑他，如实告知自己使用效果，唉"
-    input_text = "很快很好，不愧是大牌"
+    # input_text = "保湿控油很差，一下就油了，而且浮粉很严重，最难用的粉底液，"
+    # input_text = "保湿控油情况：nice"
+    # input_text = "保湿控油情况：真的很好"
+    # input_text = "整体评价：上妆服贴，不卡粉，持久度好，底妆干净整洁，我是混油皮感觉超级好用喔！nice&hearts;?"
+    # input_text = "在做完保湿的情况下还卡粉，巨卡的那种，说是据持妆粉底液但是暗沉非常的快，以为美宝莲这次暗沉会得到改善的。，结果还是令人失望。"
+    # input_text = "整体评价：混油皮和油皮可以入 保湿控油情况：妆前一定要做好保湿 持久度：七个小时基本没问题 妆感效果：超级好看！ 遮瑕效果：瑕疵少的可以替代遮瑕 我的肤质：混油鼻翼干 整体评价：粉底液超级好用，颜值超高，而且也很自然，还送了小礼品，粉扑蛋很软，特别喜欢 保湿控油情况：控油效果很好 我的肤质：混合型皮肤"
+    # input_text = "收到宝贝啦??非常满意   是经常用的牌子??  上妆效果非常不错 ?? 不容易脱妆非常服帖??  商家非常贴心 ??还赠送小礼物??  物理也非常快  下单以后 一两天就到   ????值得体验??????????"
+    # input_text = "没有之前买的好而且也没之前送的东西多了"
+    # input_text = "太好用了，上脸效果绝美，遮瑕度不错，控油时间长，妆感好"
+    # input_text = "直播出来什么都可以遮瑕，买回来小痘印都遮瑕。"
+    input_text = "真的不油"
+
     # print(re.split('[，。？ ,.?]+', input_text.strip()))
 
     ob = KeywordsBasedAspectOpinion()

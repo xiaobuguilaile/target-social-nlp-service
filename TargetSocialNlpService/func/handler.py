@@ -19,9 +19,10 @@ from tornado.concurrent import run_on_executor
 from tornado.web import HTTPError
 from TargetSocialNlpService.func.word_cloud import GenerateWordCloud
 from TargetSocialNlpService.func.kw_based_aspect_opinion import KeywordsBasedAspectOpinion
+from TargetSocialNlpService.func.word_freqency import GenerateWordFreq
 
 
-NUMBER_OF_EXECUTOR = 16  # 线程池的数量
+NUMBER_OF_EXECUTOR = 32  # 线程池的数量
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -67,7 +68,7 @@ class WordCloudHandler(BaseHandler, ABC):
         '''
         logger.info(self.__class__.__name__)
 
-        data = json.loads(self.request.body)
+        data = json.loads(self.request.body, strict=False)
         if not data:
             raise HTTPError(400, "Query argument cannot be empty string")
         return data
@@ -84,6 +85,32 @@ class WordCloudHandler(BaseHandler, ABC):
         return res
 
 
+class WordFrequcncyHandler(BaseHandler, ABC):
+    """ 词频统计子类 """
+
+    def _post_request_arguments(self, *args, **kwargs):
+        '''
+        获取数据
+        '''
+        logger.info(self.__class__.__name__)
+
+        data = json.loads(self.request.body, strict=False)
+        if not data:
+            raise HTTPError(400, "Query argument cannot be empty string")
+        return data
+
+    def _request_service(self, text):
+        '''
+        request请求处理
+        '''
+        if text:
+            gwf = GenerateWordFreq()
+            res = gwf.get_words_freq(text)
+        else:
+            raise HTTPError(400, "Query argument cannot be empty string")
+        return res
+
+
 class SentimentHandler(BaseHandler, ABC):
     """ 情感分析子类 """
 
@@ -93,7 +120,7 @@ class SentimentHandler(BaseHandler, ABC):
         '''
         logger.info(self.__class__.__name__)
 
-        data = json.loads(self.request.body)
+        data = json.loads(self.request.body, strict=False)
         if not data:
             raise HTTPError(400, "Query argument cannot be empty string")
         return data
